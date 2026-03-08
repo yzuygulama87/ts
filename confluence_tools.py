@@ -9,15 +9,17 @@ import re
 import os
 from typing import Optional
 
-from crewai.tools import BaseTool
+from pydantic import BaseModel
 from atlassian import Confluence
-from pydantic import BaseModel, Field
 
 
-class _ConfluenceTool(BaseTool):
-    confluence: Confluence = Field(exclude=True)
-    class Config:
-        arbitrary_types_allowed = True
+class _ConfluenceTool:
+    name: str = ""
+    description: str = ""
+    args_schema = None
+
+    def __init__(self, confluence: Confluence):
+        self.confluence = confluence
 
 
 def _strip_html(html: str) -> str:

@@ -9,15 +9,17 @@ import os
 from typing import Optional
 from datetime import datetime
 
-from crewai.tools import BaseTool
+from pydantic import BaseModel
 from jira import JIRA
-from pydantic import BaseModel, Field
 
 
-class _JiraTool(BaseTool):
-    jira: JIRA = Field(exclude=True)
-    class Config:
-        arbitrary_types_allowed = True
+class _JiraTool:
+    name: str = ""
+    description: str = ""
+    args_schema = None
+
+    def __init__(self, jira: JIRA):
+        self.jira = jira
 
 
 # ══════════════════════════════════════════════════════════════════════════════
