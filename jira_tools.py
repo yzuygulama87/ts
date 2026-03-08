@@ -205,7 +205,7 @@ class CreateIssueTool(_JiraTool):
             "description": description,
             "issuetype":   {"name": issue_type},
         }
-        if assignee_email: fields["assignee"]   = {"emailAddress": assignee_email}
+        if assignee_email: fields["assignee"]   = {"name": assignee_email}  # Jira Server: name=username veya email
         if priority:       fields["priority"]   = {"name": priority}
         if labels:         fields["labels"]     = labels
         if components:     fields["components"] = [{"name": c} for c in components]
@@ -234,7 +234,7 @@ class BatchCreateIssuesTool(_JiraTool):
                     "description": item.get("description", ""),
                     "issuetype":   {"name": item.get("issue_type", "Story")},
                 }
-                if item.get("assignee_email"): fields["assignee"] = {"emailAddress": item["assignee_email"]}
+                if item.get("assignee_email"): fields["assignee"] = {"name": item["assignee_email"]}
                 if item.get("priority"):       fields["priority"]  = {"name": item["priority"]}
                 if item.get("labels"):         fields["labels"]    = item["labels"]
                 issue = self.jira.create_issue(fields=fields)

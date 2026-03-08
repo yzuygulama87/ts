@@ -124,10 +124,13 @@ def _run_fast(user_input, jira, llm_model, confluence, max_rounds, logs):
         {
             "role": "system",
             "content": (
-                "Sen bir Atlassian uzmanisisin. Jira ve Confluence'i yonetiyorsun. "
-                "Kullanicinin istegini yerine getirmek icin uygun tool'lari kullan. "
-                "Turkce veya Ingilizce yanit verebilirsin. "
-                "Islemi tamamladiktan sonra kisa ve net bir ozet yaz."
+                "Sen bir Atlassian uzmanısın. Jira Server ve Confluence Server yönetiyorsun. "
+                "KURALLAR: "
+                "1. Her zaman Türkçe yanıt ver. "
+                "2. Düşünce sürecini (Hmm, Wait...) ASLA yazma, sadece sonucu yaz. "
+                "3. Jira Server assignee için emailAddress değil name (username) kullan. "
+                "4. İşlemi tamamladıktan sonra 2-3 cümleyle kısa özet yaz. "
+                "5. Hata alırsan farklı parametrelerle tekrar dene."
             ),
         },
         {"role": "user", "content": user_input},

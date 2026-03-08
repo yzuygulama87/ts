@@ -219,7 +219,7 @@ def jira_batch_create(req: BatchCreateReq, _: str = Depends(verify_api_key)):
         try:
             fields: dict = {"project": {"key": item.project_key}, "summary": item.summary,
                 "description": item.description, "issuetype": {"name": item.issue_type}}
-            if item.assignee_email: fields["assignee"]   = {"emailAddress": item.assignee_email}
+            if item.assignee_email: fields["assignee"]   = {"name": item.assignee_email}
             if item.priority:       fields["priority"]   = {"name": item.priority}
             if item.labels:         fields["labels"]     = item.labels
             if item.components:     fields["components"] = [{"name": c} for c in item.components]
