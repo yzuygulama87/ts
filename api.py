@@ -23,8 +23,6 @@ from pydantic import BaseModel
 
 from jira import JIRA
 from atlassian import Confluence
-from crewai import LLM
-
 from agent import run_agent
 
 # ── Ayarlar ───────────────────────────────────────────────────────────────────
@@ -65,9 +63,6 @@ def get_jira() -> JIRA:
 
 def get_confluence() -> Confluence:
     return Confluence(url=CONFLUENCE_SERVER, username=CONFLUENCE_EMAIL, password=CONFLUENCE_TOKEN)
-
-def get_llm() -> LLM:
-    return LLM(model=MODEL_NAME, api_key="dummy", temperature=0.3, max_tokens=4096)
 
 
 # ── Ortak modeller ─────────────────────────────────────────────────────────────
@@ -616,9 +611,8 @@ class ChatReq(BaseModel):
 def chat(req: ChatReq, _: str = Depends(verify_api_key)):
     """Serbest metin — tüm Jira ve Confluence tool'larını kullanır."""
     jira       = get_jira()
-    llm        = get_llm()
     confluence = get_confluence() if CONFLUENCE_EMAIL else None
-    result     = run_agent(req.message, jira, llm, confluence)
+    result     = run_agent(req.message, jira, MODEL_NAME, confluence)
     return {"output": result.output,
             "logs": [{"ts": l.ts, "msg": l.msg, "level": l.level} for l in result.logs],
             "success": result.success}

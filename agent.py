@@ -1,23 +1,23 @@
 """
 agent.py
 ────────
-CrewAI agent factory. Tüm Jira ve Confluence tool'larını kullanır.
+CrewAI yerine direkt litellm tool calling kullanır.
+Çok daha hızlı: 6 LLM çağrısı yerine 2 çağrı.
 """
 
-import os
-os.environ["OTEL_SDK_DISABLED"] = "true"
-os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
-
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from crewai import Agent, Crew, LLM, Process, Task
+import litellm
 from jira import JIRA
 from atlassian import Confluence
 
 from jira_tools import get_all_jira_tools
 from confluence_tools import get_all_confluence_tools
+
+litellm.drop_params = True
 
 
 @dataclass
@@ -34,11 +34,28 @@ class AgentResult:
     success: bool = True
 
 
+def _tool_to_schema(tool) -> dict:
+    schema = tool.args_schema.model_json_schema()
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name.replace("-", "_"),
+            "description": tool.description,
+            "parameters": {
+                "type": "object",
+                "properties": schema.get("properties", {}),
+                "required": schema.get("required", []),
+            },
+        },
+    }
+
+
 def run_agent(
     user_input: str,
     jira: JIRA,
-    llm: LLM,
+    llm_model: str,
     confluence: Optional[Confluence] = None,
+    max_rounds: int = 6,
 ) -> AgentResult:
     logs: list[LogEntry] = []
 
@@ -46,48 +63,87 @@ def run_agent(
         logs.append(LogEntry(ts=datetime.now().strftime("%H:%M:%S"), msg=msg, level=level))
 
     try:
-        tools = get_all_jira_tools(jira)
+        tools    = get_all_jira_tools(jira)
         if confluence:
             tools += get_all_confluence_tools(confluence)
 
+        tool_map = {t.name.replace("-", "_"): t for t in tools}
+        schemas  = [_tool_to_schema(t) for t in tools]
         log(f"{len(tools)} araç yüklendi", "ok")
 
-        agent = Agent(
-            role="Atlassian Project Manager",
-            goal=(
-                "Jira ve Confluence projelerini etkin yönet. "
-                "Issue yönetimi, sprint planlama, worklog takibi, "
-                "Confluence dokümantasyonu ve Jira-Confluence entegrasyonu."
-            ),
-            backstory=(
-                "Deneyimli bir Atlassian uzmanısın. "
-                "Jira Server ve Confluence Server kurulumlarıyla çalışıyorsun. "
-                "Türkçe veya İngilizce yanıt verebilirsin."
-            ),
-            tools=tools,
-            llm=llm,
-            verbose=False,
-            max_iter=20,
-        )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Sen bir Atlassian uzmanısın. Jira ve Confluence'ı yönetiyorsun. "
+                    "Kullanıcının isteğini yerine getirmek için uygun tool'ları kullan. "
+                    "Türkçe veya İngilizce yanıt verebilirsin. "
+                    "İşlemi tamamladıktan sonra kısa ve net bir özet yaz."
+                ),
+            },
+            {"role": "user", "content": user_input},
+        ]
 
-        task = Task(
-            description=user_input,
-            expected_output=(
-                "Yapılan işlemlerin özeti, sonuçları ve ilgili linkler"
-            ),
-            agent=agent,
-        )
+        model = f"openai/{llm_model}"
 
-        log("Agent çalışıyor...", "info")
-        crew = Crew(
-            agents=[agent],
-            tasks=[task],
-            process=Process.sequential,
-            verbose=False,
+        for round_num in range(max_rounds):
+            log(f"LLM çağrısı #{round_num + 1}", "info")
+
+            response = litellm.completion(
+                model=model,
+                messages=messages,
+                tools=schemas,
+                tool_choice="auto",
+                api_key="dummy",
+                max_tokens=2048,
+                temperature=0.3,
+            )
+
+            msg = response.choices[0].message
+
+            if not msg.tool_calls:
+                output = msg.content or "İşlem tamamlandı."
+                log("Tamamlandı", "ok")
+                return AgentResult(output=output, logs=logs)
+
+            messages.append({
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+            })
+
+            for tc in msg.tool_calls:
+                tool_name = tc.function.name
+                tool_args = json.loads(tc.function.arguments)
+                log(f"Tool: {tool_name}", "info")
+
+                tool = tool_map.get(tool_name)
+                if not tool:
+                    result = f"Tool bulunamadı: {tool_name}"
+                else:
+                    try:
+                        result = tool._run(**tool_args)
+                    except Exception as e:
+                        result = f"Tool hatası: {e}"
+
+                log(f"  → {str(result)[:80]}", "ok")
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": str(result),
+                })
+
+        # max_rounds doldu
+        response = litellm.completion(
+            model=model,
+            messages=messages,
+            api_key="dummy",
+            max_tokens=1024,
+            temperature=0.3,
         )
-        result = crew.kickoff()
+        output = response.choices[0].message.content or "İşlem tamamlandı."
         log("Tamamlandı", "ok")
-        return AgentResult(output=str(result), logs=logs)
+        return AgentResult(output=output, logs=logs)
 
     except Exception as exc:
         log(f"Hata: {exc}", "err")
