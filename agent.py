@@ -216,7 +216,7 @@ def _run_smart(user_input, jira, llm_model, confluence, logs):
         class _W(CrewBaseTool):
             name: str = inner.name
             description: str = inner.description
-            args_schema = schema
+            args_schema: type[BaseModel] = schema
 
             def _run(self, **kwargs) -> str:
                 return inner._run(**kwargs)
