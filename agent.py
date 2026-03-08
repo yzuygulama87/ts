@@ -196,6 +196,7 @@ def _run_smart(user_input, jira, llm_model, confluence, logs):
     llm = LLM(
         model=f"openai/{llm_model}",
         api_key="dummy",
+        base_url=os.environ.get("OPENAI_BASE_URL", "http://sinerjicuda02:8010/v1"),
         temperature=0.3,
         max_tokens=4096,
     )
