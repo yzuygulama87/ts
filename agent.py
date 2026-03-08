@@ -6,6 +6,15 @@ smart -> CrewAI agent (cok adimli karmasik gorevler icin)
 """
 
 import os
+
+# CrewAI 1.9.3 OPENAI_API_BASE env var'ından base_url okur
+# Bu satırlar her iki modda da çalışması için burada set ediliyor
+os.environ.setdefault("OPENAI_API_KEY",  "dummy")
+os.environ.setdefault("OPENAI_BASE_URL", "http://sinerjicuda02:8010/v1")
+os.environ.setdefault("OPENAI_API_BASE", "http://sinerjicuda02:8010/v1")
+os.environ["OTEL_SDK_DISABLED"] = "true"
+os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
+
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -193,10 +202,11 @@ def _run_smart(user_input, jira, llm_model, confluence, logs):
         tools += get_all_confluence_tools(confluence)
     log(f"{len(tools)} arac yuklendi (smart mode)", "ok")
 
+    # CrewAI 1.9.3 base_url'i LLM() parametresi olarak almıyor,
+    # OPENAI_API_BASE env var'ından okuyor
     llm = LLM(
         model=f"openai/{llm_model}",
         api_key="dummy",
-        base_url=os.environ.get("OPENAI_BASE_URL", "http://sinerjicuda02:8010/v1"),
         temperature=0.3,
         max_tokens=4096,
     )
