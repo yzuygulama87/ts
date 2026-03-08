@@ -58,17 +58,58 @@ def _tool_to_schema(tool) -> dict:
 # FAST MODE
 # ─────────────────────────────────────────────────────────────────────
 
+# ── Tool gruplari ──────────────────────────────────────────────────────────
+JIRA_READ  = {"jira_search_issues","jira_get_issue","jira_get_all_projects",
+              "jira_get_project_issues","jira_get_transitions","jira_search_fields",
+              "jira_get_user_profile","jira_get_changelog"}
+JIRA_WRITE = {"jira_create_issue","jira_batch_create_issues","jira_update_issue",
+              "jira_transition_issue","jira_delete_issue","jira_add_comment",
+              "jira_manage_worklog","jira_manage_attachment","jira_manage_issue_link",
+              "jira_link_to_epic","jira_manage_version"}
+JIRA_AGILE = {"jira_get_agile_boards","jira_get_board_issues","jira_manage_sprint"}
+CF_ALL     = {"confluence_search","confluence_list_spaces","confluence_list_pages",
+              "confluence_get_page_children","confluence_search_user",
+              "confluence_get_page","confluence_create_page","confluence_update_page",
+              "confluence_delete_page","confluence_get_comments","confluence_add_comment",
+              "confluence_get_labels","confluence_add_label","confluence_get_attachments",
+              "confluence_upload_attachment","confluence_link_jira_issue"}
+
+
+def _route_tools(user_input: str, all_tools: list) -> list:
+    """Mesaja bakarak sadece ilgili tool grubunu secip gonderir.
+    38 yerine 5-12 tool = 4-6x daha az token = cok daha hizli."""
+    text = user_input.lower()
+    cf_kw    = ["confluence","sayfa","page","space","dokuman","wiki","blog","label","etiket"]
+    agile_kw = ["sprint","board","agile","scrum"]
+    write_kw = ["oluştur","olustur","create","ekle","add","güncelle","guncelle","update",
+                "sil","delete","kapat","close","yorum","comment","worklog","attach",
+                "link","epic","versiyon","version","tasi","taşı","move","ata","assign"]
+
+    want_cf    = any(k in text for k in cf_kw)
+    want_agile = any(k in text for k in agile_kw)
+    want_write = any(k in text for k in write_kw)
+
+    allowed = set(JIRA_READ)
+    if want_write:  allowed |= JIRA_WRITE
+    if want_agile:  allowed |= JIRA_AGILE
+    if want_cf:     allowed |= CF_ALL
+
+    filtered = [t for t in all_tools if t.name.replace("-","_") in allowed]
+    return filtered if filtered else all_tools
+
+
 def _run_fast(user_input, jira, llm_model, confluence, max_rounds, logs):
     def log(msg, level="info"):
         logs.append(LogEntry(ts=datetime.now().strftime("%H:%M:%S"), msg=msg, level=level))
 
-    tools = get_all_jira_tools(jira)
+    all_tools = get_all_jira_tools(jira)
     if confluence:
-        tools += get_all_confluence_tools(confluence)
+        all_tools += get_all_confluence_tools(confluence)
 
-    tool_map = {t.name.replace("-", "_"): t for t in tools}
+    tools    = _route_tools(user_input, all_tools)
+    tool_map = {t.name.replace("-", "_"): t for t in all_tools}  # calistirmak icin tumu
     schemas  = [_tool_to_schema(t) for t in tools]
-    log(f"{len(tools)} arac yuklendi (fast mode)", "ok")
+    log(f"{len(tools)}/{len(all_tools)} arac secildi (fast mode)", "ok")
 
     messages = [
         {
