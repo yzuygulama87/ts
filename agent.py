@@ -66,7 +66,7 @@ JIRA_WRITE = {"jira_create_issue","jira_batch_create_issues","jira_update_issue"
               "jira_transition_issue","jira_delete_issue","jira_add_comment",
               "jira_manage_worklog","jira_manage_attachment","jira_manage_issue_link",
               "jira_link_to_epic","jira_manage_version"}
-JIRA_AGILE = {"jira_get_agile_boards","jira_get_board_issues","jira_manage_sprint"}
+JIRA_AGILE = {"jira_get_agile_boards","jira_get_board_issues","jira_manage_sprint","jira_get_sprint_issues_by_name"}
 CF_ALL     = {"confluence_search","confluence_list_spaces","confluence_list_pages",
               "confluence_get_page_children","confluence_search_user",
               "confluence_get_page","confluence_create_page","confluence_update_page",

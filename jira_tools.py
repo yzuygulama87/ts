@@ -659,6 +659,35 @@ class ChangelogTool(_JiraTool):
         return "\n".join(rows)
 
 
+class SprintIssuesByNameTool(_JiraTool):
+    name: str = "jira_get_sprint_issues_by_name"
+    description: str = (
+        "Sprint adını vererek o sprintteki tüm issue'ları listeler. "
+        "Board ID veya Sprint ID gerekmez. "
+        "Örn: sprint_name='Sprint 5' veya sprint_name='abc'"
+    )
+    class _In(BaseModel):
+        sprint_name: str
+        project_key: Optional[str] = None
+        max_results: int = 30
+    args_schema: type[BaseModel] = _In
+
+    def _run(self, sprint_name: str, project_key=None, max_results: int = 30) -> str:
+        jql = f'sprint = "{sprint_name}"'
+        if project_key:
+            jql += f" AND project = {project_key}"
+        jql += " ORDER BY status ASC"
+        issues = self.jira.search_issues(jql, maxResults=max_results)
+        if not issues:
+            return f"'{sprint_name}' sprint'inde issue bulunamadı."
+        return "\n".join(
+            f"{i.key} | {i.fields.summary[:55]} | {i.fields.status.name} | "
+            f"{getattr(i.fields.assignee, 'displayName', '—')} | "
+            f"{getattr(i.fields.priority, 'name', '—')}"
+            for i in issues
+        )
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # FACTORY
 # ══════════════════════════════════════════════════════════════════════════════
@@ -688,4 +717,5 @@ def get_all_jira_tools(jira: JIRA) -> list:
         BoardIssuesTool(jira=jira),
         SprintTool(jira=jira),
         ChangelogTool(jira=jira),
+        SprintIssuesByNameTool(jira=jira),
     ]
