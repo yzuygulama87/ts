@@ -3,7 +3,9 @@ uvicorn>=0.30.0
 jira>=3.8.0
 atlassian-python-api>=3.41.0
 litellm>=1.57.0
+apscheduler>=3.10.0
 pydantic>=2.0.0
+openai==1.83.0
 
-# mode="smart" için gerekli — litellm 1.57+ ile uyumlu
-crewai>=1.9.3
+# mode="smart" için gerekli
+crewai==1.9.3
