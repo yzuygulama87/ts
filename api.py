@@ -13,17 +13,19 @@ os.environ["OPENAI_API_BASE"] = os.getenv("VLLM_URL", "http://sinerjicuda02:8010
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ["CREWAI_TELEMETRY_OPT_OUT"] = "true"
 
+import json
 from typing import Optional
 from datetime import datetime as dt
 
 from fastapi import FastAPI, HTTPException, Security, Depends
+from fastapi.responses import StreamingResponse
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from jira import JIRA
 from atlassian import Confluence
-from agent import run_agent
+from agent import run_agent, stream_agent
 
 # ── Ayarlar ───────────────────────────────────────────────────────────────────
 API_KEY           = os.getenv("API_KEY",           "your-secret-key")
@@ -625,3 +627,25 @@ def chat(req: ChatReq, _: str = Depends(verify_api_key)):
             "mode":   result.mode,
             "logs": [{"ts": l.ts, "msg": l.msg, "level": l.level} for l in result.logs],
             "success": result.success}
+
+
+@app.post("/chat/stream", tags=["Agent"])
+def chat_stream(req: ChatReq, _: str = Depends(verify_api_key)):
+    """
+    Streaming chat — cevap gelmeye başladıkça SSE ile iletir.
+    Sadece fast mode desteklenir.
+
+    **SSE Event tipleri:**
+    - `log`   — hangi tool çalışıyor, kaç araç seçildi
+    - `token` — LLM cevabının her kelimesi
+    - `done`  — tamamlandı, tam cevap
+    - `error` — hata mesajı
+
+    **Postman'de kullanım:**
+    Send → Body → raw → JSON: {"message": "...", "mode": "fast"}
+    Response sekmesinde gerçek zamanlı akış görünür.
+    """
+    jira       = get_jira()
+    confluence = get_confluence() if CONFLUENCE_EMAIL else None
+    generator  = stream_agent(req.message, jira, MODEL_NAME, confluence)
+    return StreamingResponse(generator, media_type="text/event-stream")

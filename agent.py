@@ -278,3 +278,120 @@ def run_agent(
     except Exception as exc:
         log(f"Hata: {exc}", "err")
         return AgentResult(output=f"Hata: {exc}", logs=logs, success=False, mode=mode)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# STREAMING — fast mode için SSE generator
+# ─────────────────────────────────────────────────────────────────────
+
+def stream_agent(
+    user_input: str,
+    jira: JIRA,
+    llm_model: str,
+    confluence=None,
+    max_rounds: int = 6,
+):
+    """
+    SSE (Server-Sent Events) generator.
+    Her adımda bir event yayar:
+      data: {"type": "log",    "msg": "..."}
+      data: {"type": "token",  "msg": "..."}   ← LLM token stream
+      data: {"type": "done",   "msg": "..."}
+      data: {"type": "error",  "msg": "..."}
+    """
+    import json as _json
+
+    def event(type_: str, msg: str) -> str:
+        return f"data: {_json.dumps({'type': type_, 'msg': msg}, ensure_ascii=False)}\n\n"
+
+    try:
+        all_tools = get_all_jira_tools(jira)
+        if confluence:
+            all_tools += get_all_confluence_tools(confluence)
+
+        tools    = _route_tools(user_input, all_tools)
+        tool_map = {t.name.replace("-", "_"): t for t in all_tools}
+        schemas  = [_tool_to_schema(t) for t in tools]
+
+        yield event("log", f"{len(tools)}/{len(all_tools)} araç seçildi")
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Sen bir Atlassian uzmanısın. Jira ve Confluence'ı yönetiyorsun. "
+                    "Kullanıcının isteğini yerine getirmek için uygun tool'ları kullan. "
+                    "Türkçe veya İngilizce yanıt verebilirsin. "
+                    "İşlemi tamamladıktan sonra kısa ve net bir özet yaz."
+                ),
+            },
+            {"role": "user", "content": user_input},
+        ]
+
+        model = f"openai/{llm_model}"
+
+        for round_num in range(max_rounds):
+            yield event("log", f"LLM çağrısı #{round_num + 1}")
+
+            response = litellm.completion(
+                model=model, messages=messages, tools=schemas,
+                tool_choice="auto", api_key="dummy",
+                max_tokens=2048, temperature=0.3,
+            )
+
+            msg = response.choices[0].message
+
+            # Tool çağrısı yok — son cevabı stream et
+            if not msg.tool_calls:
+                final = msg.content or "İşlem tamamlandı."
+
+                # Cevabı kelime kelime stream et (hissiyat için)
+                words = final.split(" ")
+                for i, word in enumerate(words):
+                    chunk = word + (" " if i < len(words) - 1 else "")
+                    yield event("token", chunk)
+
+                yield event("done", final)
+                return
+
+            messages.append({
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+            })
+
+            for tc in msg.tool_calls:
+                tool_name = tc.function.name
+                tool_args = _json.loads(tc.function.arguments)
+                yield event("log", f"Tool: {tool_name}")
+
+                tool = tool_map.get(tool_name)
+                if not tool:
+                    result = f"Tool bulunamadı: {tool_name}"
+                else:
+                    try:
+                        result = tool._run(**tool_args)
+                    except Exception as e:
+                        result = f"Tool hatası: {e}"
+
+                yield event("log", f"  → {str(result)[:80]}")
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": str(result),
+                })
+
+        # max_rounds doldu
+        response = litellm.completion(
+            model=model, messages=messages,
+            api_key="dummy", max_tokens=1024, temperature=0.3,
+        )
+        final = response.choices[0].message.content or "İşlem tamamlandı."
+        words = final.split(" ")
+        for i, word in enumerate(words):
+            chunk = word + (" " if i < len(words) - 1 else "")
+            yield event("token", chunk)
+        yield event("done", final)
+
+    except Exception as exc:
+        yield event("error", str(exc))
