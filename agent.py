@@ -202,10 +202,10 @@ def _run_smart(user_input, jira, llm_model, confluence, logs):
         tools += get_all_confluence_tools(confluence)
     log(f"{len(tools)} arac yuklendi (smart mode)", "ok")
 
-    # CrewAI 1.9.3 base_url'i LLM() parametresi olarak almıyor,
-    # OPENAI_API_BASE env var'ından okuyor
+    # CrewAI 1.9.3: model adında openai/ prefix olmadan,
+    # OPENAI_API_BASE env var'ından base_url okur
     llm = LLM(
-        model=f"openai/{llm_model}",
+        model=llm_model,
         api_key="dummy",
         temperature=0.3,
         max_tokens=4096,
