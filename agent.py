@@ -159,20 +159,20 @@ def _run_smart(user_input, jira, llm_model, confluence, logs):
         max_tokens=4096,
     )
 
-    crewai_tools = []
-    for t in tools:
-        _inner  = t
-        _schema = t.args_schema
-
+    def _make_crewai_tool(inner, schema):
+        """Closure bug'unu önlemek için factory fonksiyon."""
         class _W(CrewBaseTool):
-            name: str = _inner.name
-            description: str = _inner.description
-            args_schema = _schema
+            name: str = inner.name
+            description: str = inner.description
+            args_schema = schema
 
             def _run(self, **kwargs) -> str:
-                return _inner._run(**kwargs)
+                return inner._run(**kwargs)
 
-        crewai_tools.append(_W())
+        _W.__name__ = f"_W_{inner.name}"
+        return _W()
+
+    crewai_tools = [_make_crewai_tool(t, t.args_schema) for t in tools]
 
     agent = Agent(
         role="Atlassian Project Manager",
