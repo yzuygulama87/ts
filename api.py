@@ -606,13 +606,22 @@ def cf_link_jira(page_id: str, req: CFLinkJiraReq, _: str = Depends(verify_api_k
 
 class ChatReq(BaseModel):
     message: str
+    mode: str = "fast"   # "fast" veya "smart"
 
 @app.post("/chat", tags=["Agent"])
 def chat(req: ChatReq, _: str = Depends(verify_api_key)):
-    """Serbest metin — tüm Jira ve Confluence tool'larını kullanır."""
+    """
+    Serbest metin — tüm Jira ve Confluence tool'larını kullanır.
+
+    - **mode: fast** (varsayılan) — litellm tool calling, ~2 LLM çağrısı, hızlı
+    - **mode: smart** — CrewAI agent, çok adımlı karmaşık görevler için, yavaş
+    """
+    if req.mode not in ("fast", "smart"):
+        raise HTTPException(status_code=400, detail="mode 'fast' veya 'smart' olmali.")
     jira       = get_jira()
     confluence = get_confluence() if CONFLUENCE_EMAIL else None
-    result     = run_agent(req.message, jira, MODEL_NAME, confluence)
+    result     = run_agent(req.message, jira, MODEL_NAME, confluence, mode=req.mode)
     return {"output": result.output,
+            "mode":   result.mode,
             "logs": [{"ts": l.ts, "msg": l.msg, "level": l.level} for l in result.logs],
             "success": result.success}
